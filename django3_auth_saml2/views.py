@@ -160,6 +160,41 @@ def signin(req: WSGIRequest) -> HttpResponseRedirect:
     return HttpResponseRedirect(redirect_url)
 
 
+def signout(req: WSGIRequest) -> HttpResponseRedirect:
+    """
+    This route is invoked when the User attempts to logout of the application
+    without. As a result of executing this function the User's browswer should 
+    be redirected to the SSO system.
+    """
+
+    # obtain the 'next' parameter from the GET command, and if not provided,
+    # then use the default value as configured in the settings.
+
+    next_url = req.GET.get('next', _default_next_url())
+
+    # Only permit signout requests where the next_url is a safe URL
+
+    if not url_has_allowed_host_and_scheme(next_url, None):
+        errmsg = f"SAML2: unsafe next URL: {next_url}"
+        _LOG.error(errmsg)
+        raise PermissionDenied(errmsg)
+
+    # Next we need to obtain the SSO system URL to direct the User's browser to
+    # that system so that they can perform the login.  We use the RelayState
+    # URL parameter to pass the 'next-url' value back to the sso handler.
+
+    saml_client = _get_saml_client(req)
+    resp = saml_client.global_logout()
+
+    redirect_url = dict(resp['headers'])['Location']
+    redirect_url += f"&RelayState={next_url}"
+
+    # This causes the web client to go to the SSO SAML system to force the use
+    # to use that system to authenticate.
+
+    return HttpResponseRedirect(redirect_url)
+
+
 # -----------------------------------------------------------------------------
 #
 #                          Private Helper Functions
